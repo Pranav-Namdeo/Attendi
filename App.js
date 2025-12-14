@@ -1982,7 +1982,7 @@ export default function App() {
     console.log('🔒 Step 2: Checking face verification...');
     if (!verifiedToday) {
       console.log('🔒 Face verification required to start attendance');
-      alert('🔒 Face Verification passed!\n\nWiFi validation passed!');
+      alert('🔒 Face verification required!\n\nPlease complete biometric verification to start attendance.');
       setShowFaceVerification(true);
       return;
     }
