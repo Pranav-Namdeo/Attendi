@@ -3929,8 +3929,8 @@ export default function App() {
     );
   }
 
-  // WiFi Test Screen (Development)
-  if (activeTab === 'wifi') {
+  // WiFi Test Screen (Development - Students only)
+  if (activeTab === 'wifi' && selectedRole === 'student') {
     return (
       <View style={{ flex: 1, backgroundColor: theme.background }}>
         <StatusBar style={theme.statusBar} />

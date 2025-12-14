@@ -15,7 +15,6 @@ export default function BottomNavigation({ theme, activeTab, onTabChange, userRo
     { id: 'home', Icon: HomeIcon, label: 'Home' },
     { id: 'calendar', Icon: CalendarIcon, label: 'Calendar' },
     { id: 'timetable', Icon: BookIcon, label: 'Timetable' },
-    { id: 'wifi', Icon: WiFiIcon, label: 'WiFi Test' }, // Development tab for BSSID testing
   ];
 
   const tabs = userRole === 'teacher' ? teacherTabs : studentTabs;

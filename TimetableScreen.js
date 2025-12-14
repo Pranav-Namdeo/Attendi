@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, TextInput, Modal, Alert
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, TextInput, Modal, Alert, RefreshControl
 } from 'react-native';
 import { BookIcon, CalendarIcon, CoffeeIcon, LocationIcon } from './Icons';
 import { getServerTime } from './ServerTime';
@@ -36,6 +36,26 @@ export default function TimetableScreen({
   
   // Three-dot menu state
   const [showMenu, setShowMenu] = useState(false);
+
+  // Teacher timetable selection states
+  const [selectedSemester, setSelectedSemester] = useState(semester || '3');
+  const [selectedBranch, setSelectedBranch] = useState(branch || 'B.Tech Computer Science');
+  const [showSemesterDropdown, setShowSemesterDropdown] = useState(false);
+  const [showBranchDropdown, setShowBranchDropdown] = useState(false);
+  
+  // Available options for teachers
+  const semesterOptions = ['1', '2', '3', '4', '5', '6', '7', '8'];
+  const branchOptions = [
+    'B.Tech Computer Science',
+    'B.Tech Data Science',
+    'B.Tech Information Technology',
+    'B.Tech Electronics',
+    'B.Tech Mechanical',
+    'B.Tech Civil',
+    'BCA',
+    'MCA',
+    'MBA'
+  ];
 
   // Handle edit mode toggle with server permission check
   const handleToggleEditMode = async () => {
@@ -116,52 +136,86 @@ export default function TimetableScreen({
     }
   };
 
-  // Pre-defined subjects list
-  const SUBJECTS = [
-    'Data Structures',
-    'Database Management',
-    'Operating Systems',
-    'Computer Networks',
-    'Software Engineering',
-    'Web Development',
-    'Machine Learning',
-    'Artificial Intelligence',
-    'Programming in C',
-    'Programming in Java',
-    'Python Programming',
-    'Digital Electronics',
-    'Microprocessors',
-    'Signals & Systems',
-    'Control Systems',
-    'Thermodynamics',
-    'Fluid Mechanics',
-    'Structural Analysis',
-    'Surveying',
-    'Mathematics',
-    'Physics',
-    'Chemistry',
-    'English',
-    'Free Period',
-  ];
+  // Server data states - no hardcoded fallbacks
+  const [subjects, setSubjects] = useState([]);
+  const [rooms, setRooms] = useState([]);
+  const [teachers, setTeachers] = useState([]);
+  
+  // Loading states for dropdowns
+  const [loadingSubjects, setLoadingSubjects] = useState(false);
+  const [loadingRooms, setLoadingRooms] = useState(false);
+  const [loadingTeachers, setLoadingTeachers] = useState(false);
 
-  // Pre-defined rooms list
-  const ROOMS = [
-    'Room 101', 'Room 102', 'Room 103', 'Room 104', 'Room 105',
-    'Room 201', 'Room 202', 'Room 203', 'Room 204', 'Room 205',
-    'Room 301', 'Room 302', 'Room 303', 'Room 304', 'Room 305',
-    'Lab 1', 'Lab 2', 'Lab 3', 'Lab 4',
-    'Auditorium', 'Seminar Hall', 'Library',
-  ];
+  // Fetch subjects from server
+  const fetchSubjects = async () => {
+    if (!selectedSemester || !selectedBranch) return;
+    
+    setLoadingSubjects(true);
+    try {
+      const response = await fetch(`${socketUrl}/api/subjects?semester=${selectedSemester}&branch=${encodeURIComponent(selectedBranch)}`);
+      const data = await response.json();
+      
+      if (data.success && data.subjects) {
+        // Extract subject names from server data
+        const subjectNames = data.subjects.map(subject => subject.subjectName || subject.name);
+        setSubjects(subjectNames);
+        console.log('✅ Loaded subjects from server:', subjectNames.length);
+      } else {
+        console.warn('⚠️ No subjects found for', selectedSemester, selectedBranch);
+        setSubjects([]);
+      }
+    } catch (error) {
+      console.error('❌ Error fetching subjects:', error);
+      setSubjects([]);
+    }
+    setLoadingSubjects(false);
+  };
 
-  // Teachers list (will be fetched from server)
-  const [teachers, setTeachers] = useState([
-    'Dr. Rajesh Kumar',
-    'Prof. Meera Singh',
-    'Dr. Sunil Patil',
-    'Prof. Anjali Desai',
-    'Dr. Amit Patel',
-    'Prof. Sunita Reddy',
-  ]);
+  // Fetch rooms from server
+  const fetchRooms = async () => {
+    setLoadingRooms(true);
+    try {
+      const response = await fetch(`${socketUrl}/api/classrooms`);
+      const data = await response.json();
+      
+      if (data.success && data.classrooms) {
+        // Extract room numbers/names from server data
+        const roomNames = data.classrooms.map(room => room.roomNumber || room.name || room.room);
+        setRooms(roomNames);
+        console.log('✅ Loaded rooms from server:', roomNames.length);
+      } else {
+        console.warn('⚠️ No rooms found on server');
+        setRooms([]);
+      }
+    } catch (error) {
+      console.error('❌ Error fetching rooms:', error);
+      setRooms([]);
+    }
+    setLoadingRooms(false);
+  };
+
+  // Fetch teachers from server
+  const fetchTeachers = async () => {
+    setLoadingTeachers(true);
+    try {
+      const response = await fetch(`${socketUrl}/api/teachers`);
+      const data = await response.json();
+      
+      if (data.success && data.teachers) {
+        // Extract teacher names from server data
+        const teacherNames = data.teachers.map(teacher => teacher.name);
+        setTeachers(teacherNames);
+        console.log('✅ Loaded teachers from server:', teacherNames.length);
+      } else {
+        console.warn('⚠️ No teachers found on server');
+        setTeachers([]);
+      }
+    } catch (error) {
+      console.error('❌ Error fetching teachers:', error);
+      setTeachers([]);
+    }
+    setLoadingTeachers(false);
+  };
 
   // Get days dynamically from timetable in proper week order (recalculates when timetable changes)
   const DAYS = useMemo(() => {
@@ -175,6 +229,16 @@ export default function TimetableScreen({
     console.log('📅 DAYS recalculated:', days);
     return days;
   }, [timetable]);
+
+  // Fetch dropdown data when component mounts or dependencies change
+  useEffect(() => {
+    fetchSubjects();
+  }, [selectedSemester, selectedBranch, socketUrl]);
+
+  useEffect(() => {
+    fetchRooms();
+    fetchTeachers();
+  }, [socketUrl]);
 
   // Get current day index based on available days
   const getCurrentDayIndex = () => {
@@ -200,7 +264,7 @@ export default function TimetableScreen({
 
   useEffect(() => {
     fetchTimetable();
-  }, [semester, branch]);
+  }, [selectedSemester, selectedBranch]);
 
   // Update current day when timetable loads
   useEffect(() => {
@@ -209,34 +273,23 @@ export default function TimetableScreen({
     }
   }, [timetable]);
 
-  // Force refresh when screen is focused
-  useEffect(() => {
-    const interval = setInterval(() => {
-      // Check if timetable needs refresh every 30 seconds
-      if (semester && branch && socketUrl) {
-        fetchTimetable();
-      }
-    }, 30000);
-    return () => clearInterval(interval);
-  }, [semester, branch, socketUrl]);
-
-  const fetchTimetable = async () => {
-    if (!semester || !branch) {
-      console.log('No semester or branch provided');
-      setLoading(false);
+  const fetchTimetable = async (isRefreshing = false) => {
+    if (!selectedSemester || !selectedBranch) {
+      console.log('No semester or branch selected');
+      if (!isRefreshing) setLoading(false);
       return;
     }
 
     if (!socketUrl) {
       console.log('No socket URL provided');
-      setLoading(false);
+      if (!isRefreshing) setLoading(false);
       return;
     }
 
-    console.log('Fetching timetable for:', semester, branch);
-    setLoading(true);
+    console.log('Fetching timetable for:', selectedSemester, selectedBranch);
+    if (!isRefreshing) setLoading(true);
     try {
-      const url = `${socketUrl}/api/timetable/${semester}/${branch}?t=${Date.now()}`;
+      const url = `${socketUrl}/api/timetable/${selectedSemester}/${selectedBranch}?t=${Date.now()}`;
       console.log('Fetching from:', url);
 
       const response = await fetch(url, {
@@ -273,8 +326,15 @@ export default function TimetableScreen({
       console.log('Error fetching timetable:', error);
       setTimetable(null);
     } finally {
-      setLoading(false);
+      if (!isRefreshing) setLoading(false);
     }
+  };
+
+  // Pull-to-refresh handler
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await fetchTimetable(true);
+    setRefreshing(false);
   };
 
   const saveTimetable = async () => {
@@ -514,7 +574,19 @@ export default function TimetableScreen({
   const currentPeriod = getCurrentPeriod();
 
   return (
-    <ScrollView style={[styles.container, { backgroundColor: theme.background }]}>
+    <ScrollView 
+      style={[styles.container, { backgroundColor: theme.background }]}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          colors={[theme.primary]}
+          tintColor={theme.primary}
+          title="Pull to refresh timetable..."
+          titleColor={theme.textSecondary}
+        />
+      }
+    >
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.titleRow}>
@@ -559,7 +631,7 @@ export default function TimetableScreen({
         </View>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
           <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
-            {semester && branch ? `Semester ${semester} • ${branch}` : 'Your class schedule'}
+            {selectedSemester && selectedBranch ? `Semester ${selectedSemester} • ${selectedBranch}` : 'Your class schedule'}
           </Text>
           {editModeEnabled && (
             <View style={{
@@ -626,6 +698,59 @@ export default function TimetableScreen({
             ))}
           </ScrollView>
 
+          {/* Semester and Branch Selectors (Teachers Only) */}
+          {isTeacher && (
+            <View style={[styles.selectorCard, {
+              backgroundColor: theme.cardBackground,
+              borderColor: theme.border,
+              marginBottom: 16
+            }]}>
+              <Text style={[styles.selectorTitle, { color: theme.text }]}>
+                📚 Select Class Timetable
+              </Text>
+              
+              <View style={styles.selectorRow}>
+                {/* Semester Selector */}
+                <View style={styles.selectorContainer}>
+                  <Text style={[styles.selectorLabel, { color: theme.textSecondary }]}>Semester</Text>
+                  <TouchableOpacity
+                    onPress={() => setShowSemesterDropdown(!showSemesterDropdown)}
+                    style={[styles.selectorButton, {
+                      backgroundColor: theme.background,
+                      borderColor: theme.border
+                    }]}
+                  >
+                    <Text style={[styles.selectorText, { color: theme.text }]}>
+                      Sem {selectedSemester}
+                    </Text>
+                    <Text style={[styles.selectorArrow, { color: theme.textSecondary }]}>▼</Text>
+                  </TouchableOpacity>
+                  
+
+                </View>
+
+                {/* Branch Selector */}
+                <View style={styles.selectorContainer}>
+                  <Text style={[styles.selectorLabel, { color: theme.textSecondary }]}>Branch</Text>
+                  <TouchableOpacity
+                    onPress={() => setShowBranchDropdown(!showBranchDropdown)}
+                    style={[styles.selectorButton, {
+                      backgroundColor: theme.background,
+                      borderColor: theme.border
+                    }]}
+                  >
+                    <Text style={[styles.selectorText, { color: theme.text }]} numberOfLines={1}>
+                      {selectedBranch.replace('B.Tech ', '').replace('B.Tech', 'BTech')}
+                    </Text>
+                    <Text style={[styles.selectorArrow, { color: theme.textSecondary }]}>▼</Text>
+                  </TouchableOpacity>
+                  
+
+                </View>
+              </View>
+            </View>
+          )}
+
           {/* Today's Schedule */}
           <View style={[styles.scheduleCard, {
             backgroundColor: theme.cardBackground,
@@ -635,9 +760,9 @@ export default function TimetableScreen({
               <Text style={[styles.scheduleTitle, { color: theme.text }]}>
                 {DAYS[currentDay] || 'Monday'}'s Schedule
               </Text>
-              <TouchableOpacity onPress={fetchTimetable} style={{ padding: 8 }}>
-                <Text style={{ color: theme.primary, fontSize: 14 }}>🔄 Refresh</Text>
-              </TouchableOpacity>
+              <View style={{ padding: 8 }}>
+                <Text style={{ color: theme.textSecondary, fontSize: 12 }}>Pull down to refresh</Text>
+              </View>
             </View>
 
             {getPeriods().map((period) => {
@@ -722,7 +847,18 @@ export default function TimetableScreen({
           }]}>
             <Text style={[styles.weekTitle, { color: theme.text }]}>Week Overview</Text>
 
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            <ScrollView 
+              horizontal 
+              showsHorizontalScrollIndicator={false}
+              refreshControl={
+                <RefreshControl
+                  refreshing={refreshing}
+                  onRefresh={onRefresh}
+                  colors={[theme.primary]}
+                  tintColor={theme.primary}
+                />
+              }
+            >
               <View style={styles.weekGrid}>
                 {/* Header Row */}
                 <View style={styles.weekRow}>
@@ -803,6 +939,134 @@ export default function TimetableScreen({
 
       <View style={{ height: 100 }} />
 
+      {/* Semester Dropdown Modal */}
+      <Modal
+        visible={showSemesterDropdown}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowSemesterDropdown(false)}
+      >
+        <TouchableOpacity
+          style={{
+            flex: 1,
+            backgroundColor: 'rgba(0,0,0,0.5)',
+            justifyContent: 'center',
+            alignItems: 'center',
+            padding: 20,
+          }}
+          onPress={() => setShowSemesterDropdown(false)}
+        >
+          <View style={{
+            backgroundColor: theme.cardBackground,
+            borderRadius: 12,
+            borderWidth: 1,
+            borderColor: theme.border,
+            minWidth: 200,
+            maxHeight: 300,
+          }}>
+            <Text style={{
+              fontSize: 16,
+              fontWeight: 'bold',
+              color: theme.text,
+              padding: 16,
+              borderBottomWidth: 1,
+              borderBottomColor: theme.border,
+            }}>
+              Select Semester
+            </Text>
+            <ScrollView>
+              {semesterOptions.map((sem) => (
+                <TouchableOpacity
+                  key={sem}
+                  onPress={() => {
+                    setSelectedSemester(sem);
+                    setShowSemesterDropdown(false);
+                  }}
+                  style={{
+                    padding: 16,
+                    borderBottomWidth: 1,
+                    borderBottomColor: theme.border + '30',
+                    backgroundColor: selectedSemester === sem ? theme.primary + '20' : 'transparent'
+                  }}
+                >
+                  <Text style={{ 
+                    fontSize: 14,
+                    color: selectedSemester === sem ? theme.primary : theme.text,
+                    fontWeight: selectedSemester === sem ? '600' : '400'
+                  }}>
+                    Semester {sem}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Branch Dropdown Modal */}
+      <Modal
+        visible={showBranchDropdown}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowBranchDropdown(false)}
+      >
+        <TouchableOpacity
+          style={{
+            flex: 1,
+            backgroundColor: 'rgba(0,0,0,0.5)',
+            justifyContent: 'center',
+            alignItems: 'center',
+            padding: 20,
+          }}
+          onPress={() => setShowBranchDropdown(false)}
+        >
+          <View style={{
+            backgroundColor: theme.cardBackground,
+            borderRadius: 12,
+            borderWidth: 1,
+            borderColor: theme.border,
+            minWidth: 280,
+            maxHeight: 400,
+          }}>
+            <Text style={{
+              fontSize: 16,
+              fontWeight: 'bold',
+              color: theme.text,
+              padding: 16,
+              borderBottomWidth: 1,
+              borderBottomColor: theme.border,
+            }}>
+              Select Branch
+            </Text>
+            <ScrollView>
+              {branchOptions.map((branch) => (
+                <TouchableOpacity
+                  key={branch}
+                  onPress={() => {
+                    setSelectedBranch(branch);
+                    setShowBranchDropdown(false);
+                  }}
+                  style={{
+                    padding: 16,
+                    borderBottomWidth: 1,
+                    borderBottomColor: theme.border + '30',
+                    backgroundColor: selectedBranch === branch ? theme.primary + '20' : 'transparent'
+                  }}
+                >
+                  <Text style={{ 
+                    fontSize: 14,
+                    color: selectedBranch === branch ? theme.primary : theme.text,
+                    fontWeight: selectedBranch === branch ? '600' : '400'
+                  }}>
+                    {branch}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
       {/* Edit Modal */}
       <Modal
         visible={editingCell !== null && editModeEnabled}
@@ -866,22 +1130,35 @@ export default function TimetableScreen({
                   borderRadius: 8,
                   marginTop: 4,
                 }}>
-                  {SUBJECTS.map((subject, index) => (
-                    <TouchableOpacity
-                      key={index}
-                      onPress={() => {
-                        setEditSubject(subject);
-                        setShowSubjectDropdown(false);
-                      }}
-                      style={{
-                        padding: 12,
-                        borderBottomWidth: index < SUBJECTS.length - 1 ? 1 : 0,
-                        borderBottomColor: theme.border,
-                      }}
-                    >
-                      <Text style={{ fontSize: 14, color: theme.text }}>{subject}</Text>
-                    </TouchableOpacity>
-                  ))}
+                  {loadingSubjects ? (
+                    <View style={{ padding: 12, alignItems: 'center' }}>
+                      <Text style={{ fontSize: 14, color: theme.textSecondary }}>Loading subjects...</Text>
+                    </View>
+                  ) : subjects.length === 0 ? (
+                    <View style={{ padding: 12, alignItems: 'center' }}>
+                      <Text style={{ fontSize: 14, color: theme.textSecondary }}>No subjects found</Text>
+                      <Text style={{ fontSize: 12, color: theme.textSecondary, marginTop: 4 }}>
+                        {semester && branch ? `for ${branch} Sem ${semester}` : 'Select semester & branch first'}
+                      </Text>
+                    </View>
+                  ) : (
+                    subjects.map((subject, index) => (
+                      <TouchableOpacity
+                        key={index}
+                        onPress={() => {
+                          setEditSubject(subject);
+                          setShowSubjectDropdown(false);
+                        }}
+                        style={{
+                          padding: 12,
+                          borderBottomWidth: index < subjects.length - 1 ? 1 : 0,
+                          borderBottomColor: theme.border,
+                        }}
+                      >
+                        <Text style={{ fontSize: 14, color: theme.text }}>{subject}</Text>
+                      </TouchableOpacity>
+                    ))
+                  )}
                 </ScrollView>
               )}
               
@@ -936,22 +1213,35 @@ export default function TimetableScreen({
                   borderRadius: 8,
                   marginTop: 4,
                 }}>
-                  {ROOMS.map((room, index) => (
-                    <TouchableOpacity
-                      key={index}
-                      onPress={() => {
-                        setEditRoom(room);
-                        setShowRoomDropdown(false);
-                      }}
-                      style={{
-                        padding: 12,
-                        borderBottomWidth: index < ROOMS.length - 1 ? 1 : 0,
-                        borderBottomColor: theme.border,
-                      }}
-                    >
-                      <Text style={{ fontSize: 14, color: theme.text }}>{room}</Text>
-                    </TouchableOpacity>
-                  ))}
+                  {loadingRooms ? (
+                    <View style={{ padding: 12, alignItems: 'center' }}>
+                      <Text style={{ fontSize: 14, color: theme.textSecondary }}>Loading rooms...</Text>
+                    </View>
+                  ) : rooms.length === 0 ? (
+                    <View style={{ padding: 12, alignItems: 'center' }}>
+                      <Text style={{ fontSize: 14, color: theme.textSecondary }}>No rooms found</Text>
+                      <Text style={{ fontSize: 12, color: theme.textSecondary, marginTop: 4 }}>
+                        Check server configuration
+                      </Text>
+                    </View>
+                  ) : (
+                    rooms.map((room, index) => (
+                      <TouchableOpacity
+                        key={index}
+                        onPress={() => {
+                          setEditRoom(room);
+                          setShowRoomDropdown(false);
+                        }}
+                        style={{
+                          padding: 12,
+                          borderBottomWidth: index < rooms.length - 1 ? 1 : 0,
+                          borderBottomColor: theme.border,
+                        }}
+                      >
+                        <Text style={{ fontSize: 14, color: theme.text }}>{room}</Text>
+                      </TouchableOpacity>
+                    ))
+                  )}
                 </ScrollView>
               )}
               
@@ -1006,24 +1296,61 @@ export default function TimetableScreen({
                   borderRadius: 8,
                   marginTop: 4,
                 }}>
-                  {teachers.map((teacher, index) => (
-                    <TouchableOpacity
-                      key={index}
-                      onPress={() => {
-                        setEditTeacher(teacher);
-                        setShowTeacherDropdown(false);
-                      }}
-                      style={{
-                        padding: 12,
-                        borderBottomWidth: index < teachers.length - 1 ? 1 : 0,
-                        borderBottomColor: theme.border,
-                      }}
-                    >
-                      <Text style={{ fontSize: 14, color: theme.text }}>{teacher}</Text>
-                    </TouchableOpacity>
-                  ))}
+                  {loadingTeachers ? (
+                    <View style={{ padding: 12, alignItems: 'center' }}>
+                      <Text style={{ fontSize: 14, color: theme.textSecondary }}>Loading teachers...</Text>
+                    </View>
+                  ) : teachers.length === 0 ? (
+                    <View style={{ padding: 12, alignItems: 'center' }}>
+                      <Text style={{ fontSize: 14, color: theme.textSecondary }}>No teachers found</Text>
+                      <Text style={{ fontSize: 12, color: theme.textSecondary, marginTop: 4 }}>
+                        Check server configuration
+                      </Text>
+                    </View>
+                  ) : (
+                    teachers.map((teacher, index) => (
+                      <TouchableOpacity
+                        key={index}
+                        onPress={() => {
+                          setEditTeacher(teacher);
+                          setShowTeacherDropdown(false);
+                        }}
+                        style={{
+                          padding: 12,
+                          borderBottomWidth: index < teachers.length - 1 ? 1 : 0,
+                          borderBottomColor: theme.border,
+                        }}
+                      >
+                        <Text style={{ fontSize: 14, color: theme.text }}>{teacher}</Text>
+                      </TouchableOpacity>
+                    ))
+                  )}
                 </ScrollView>
               )}
+            </View>
+
+            {/* Refresh Data Button */}
+            <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
+              <TouchableOpacity
+                onPress={() => {
+                  fetchSubjects();
+                  fetchRooms();
+                  fetchTeachers();
+                }}
+                style={{
+                  flex: 1,
+                  backgroundColor: theme.primary + '20',
+                  borderWidth: 1,
+                  borderColor: theme.primary,
+                  padding: 10,
+                  borderRadius: 8,
+                  alignItems: 'center',
+                }}
+              >
+                <Text style={{ color: theme.primary, fontWeight: '600', fontSize: 13 }}>
+                  🔄 Refresh Data
+                </Text>
+              </TouchableOpacity>
             </View>
 
             {/* Quick Actions Row 1 */}
@@ -1466,4 +1793,46 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 2,
   },
+  // Selector styles
+  selectorCard: {
+    marginHorizontal: 20,
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 16,
+  },
+  selectorTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: 12,
+  },
+  selectorRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  selectorContainer: {
+    flex: 1,
+  },
+  selectorLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    marginBottom: 6,
+  },
+  selectorButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  selectorText: {
+    fontSize: 14,
+    fontWeight: '500',
+    flex: 1,
+  },
+  selectorArrow: {
+    fontSize: 12,
+    marginLeft: 8,
+  },
+
 });
